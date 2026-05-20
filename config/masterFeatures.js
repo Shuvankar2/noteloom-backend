@@ -1,0 +1,47 @@
+module.exports = {
+  student: [
+    { key: 'courses', title: 'My Courses', icon: 'BookOpen', description: 'Access your enrolled courses' },
+    { key: 'assignments', title: 'Assignments', icon: 'ClipboardList', description: 'View and submit assignments' },
+    { key: 'attendance', title: 'Attendance', icon: 'CheckCircle', description: 'View attendance records' },
+    { key: 'library', title: 'Digital Library Resources', icon: 'Library', description: 'Access digital resources' },
+    { key: 'dept_notices', title: 'Departmental Notices', icon: 'MessageSquare', description: 'View department announcements' },
+    { key: 'org_calendar', title: "Organisation's Calendar", icon: 'Calendar', description: 'View academic events' },
+    { key: 'payment_details', title: 'Payment Details', icon: 'Receipt', description: 'View transaction history' },
+    { key: 'fees', title: 'Dues & Pay Fees', icon: 'IndianRupee', description: 'Pay pending dues' },
+    { key: 'update_info', title: 'Final Year Project Info.', icon: 'User', description: 'Update your final year project' },
+    { key: 'results', title: 'University Marks System', icon: 'GraduationCap', description: 'Check semester marks' },
+    { key: 'feedback', title: 'Sem. Feedback', icon: 'MessageSquare', description: 'Submit semester feedback' },
+    { key: 'exam_form', title: 'Exam Form', icon: 'FormInputIcon', description: 'Fill exam form' },
+    { key: 'timetable', title: 'Timetable & Schedule', icon: 'Calendar', description: 'View routines and track lessons' },
+    { key: 'admit_card', title: 'Admit Card', icon: 'FileText', description: 'Download admit card' }
+  ],
+  faculty: [
+    { key: 'my_classes', title: 'My Classes', icon: 'Users', description: 'Manage assigned classes' },
+    { key: 'attendance_marking', title: 'Mark Student Attendance', icon: 'CheckCircle', description: 'Mark daily attendance' },
+    { key: 'upload_marks', title: 'Upload Marks', icon: 'PenBoxIcon', description: 'Grade student papers' },
+    { key: 'upload_content', title: 'Course Material', icon: 'Upload', description: 'Upload study resources' },
+    { key: 'question_bank', title: 'Upload Question Bank', icon: 'FileText', description: 'Upload exam questions' },
+    { key: 'library', title: 'Digital Library Resources', icon: 'Library', description: 'Access digital resources' },
+    { key: 'leave_apply', title: 'Apply Leave', icon: 'Briefcase', description: 'Apply for casual or sick leave' },
+    { key: 'dept_notices', title: 'Departmental Notices', icon: 'MessageSquare', description: 'View department announcements' },
+    { key: 'staff_notices', title: 'Staff Notices', icon: 'MessageSquare', description: 'View staff announcements' },
+    { key: 'coe_manage', title: 'COE Manage', icon: 'FileCog', description: 'Controller of Examinations controls' },
+    { key: 'org_calendar', title: "Organization's Calender", icon: 'Calendar', description: 'View academic events' },
+    { key: 'timetable', title: 'Timetable & Schedule', icon: 'Calendar', description: 'Manage routines and lesson plans' },
+  ],
+  college_admin: [
+    { key: 'staff_notices', title: 'Staff Notices', icon: 'MessageSquare', description: 'Publish notices for staff' },
+    { key: 'settings', title: 'Noteloom College Settings', icon: 'Settings', description: 'Manage college configuration' },
+    { key: 'leave_manager', title: 'Faculty Leave Manager', icon: 'Briefcase', description: 'Approve or reject faculty leaves' },
+    { key: 'library', title: 'Digital Library Resources', icon: 'Library', description: 'Access digital resources' },
+    { key: 'approvals', title: 'Faculty Approval', icon: 'ShieldCheck', description: 'Approve new faculty accounts' },
+    { key: 'timetable', title: 'Timetable & Schedule', icon: 'Calendar', description: 'View and manage class routines' },
+    { key: 'manage_users', title: 'User Management', icon: 'Users', description: 'Manage student and staff profiles' },
+    { key: 'account_creation', title: 'Account Creation Management', icon: 'UserPlus', description: 'Create and onboard new users' },
+    { key: 'fees_exam_records', title: 'Sem. fees and Exam form Records', icon: 'Banknote', description: 'Track fees and exam submissions' },
+    { key: 'manage_departments', title: 'Manage Departments', icon: 'Building', description: 'Add or edit college departments' },
+    { key: 'coe_manage', title: 'COE Manage', icon: 'FileCog', description: 'Controller of Examinations controls' },
+    { key: 'exam_management', title: 'Exam Management', icon: 'FileText', description: 'Schedule and configure exams' },
+    { key: 'university_marks', title: 'University Marks System', icon: 'GraduationCap', description: 'Manage and publish university marks' }
+  ]
+};
