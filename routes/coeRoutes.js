@@ -21,16 +21,8 @@ const { StudentSubjectMap } = require('../models/COE_Extended');
 
 const { setTenantContext } = require('../middleware/authMiddleware');
 
-const webdataDir = path.join(__dirname, '../../webdata');
-const questionBankStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(webdataDir, 'uploads', 'coe_question_bank');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => cb(null, 'qb-' + Date.now() + path.extname(file.originalname))
-});
-const uploadQB = multer({ storage: questionBankStorage, limits: { fileSize: 50 * 1024 * 1024 } });
+// Import Cloudinary upload middleware
+const { uploadCloud } = require('../config/cloudinary');
 
 // Apply middleware to all routes
 router.use(setTenantContext);
@@ -330,19 +322,30 @@ router.post('/allocation', async (req, res) => {
 // 2. QUESTION BANK
 // ==========================================
 
-router.post('/upload-question', uploadQB.single('file'), async (req, res) => {
+// Use uploadCloud instead of uploadQB
+router.post('/upload-question', uploadCloud.single('file'), async (req, res) => {
   try {
     const { facultyId, facultyName, subjectId, year, category, title } = req.body;
     if (!req.file || !title) return res.status(400).json({ error: 'File and Title required' });
 
     const question = new QuestionBank({
-      tenantId: req.tenant.id, facultyId, facultyName, subjectId, title, year, category,
-      fileUrl: `/webdata/uploads/coe_question_bank/${req.file.filename}`,
+      tenantId: req.tenant.id, 
+      facultyId, 
+      facultyName, 
+      subjectId, 
+      title, 
+      year, 
+      category,
+      // 🟢 NEW: Save the secure Cloudinary URL directly to the database
+      fileUrl: req.file.path, 
       fileName: req.file.originalname
     });
+    
     await question.save();
     res.json({ message: 'Success' });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { 
+    res.status(500).json({ error: err.message }); 
+  }
 });
 
 // --- GET QUESTIONS (With Details Restored) ---
@@ -411,12 +414,14 @@ router.delete('/question/:id', async (req, res) => {
     try {
         const question = await QuestionBank.findById(req.params.id);
         if (question) {
-             const filePath = path.join(__dirname, '../../', question.fileUrl.startsWith('/') ? question.fileUrl.substring(1) : question.fileUrl);
-             if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+             // 🟢 REMOVED fs.unlinkSync because the file lives on Cloudinary now.
+             // It will simply delete the database record.
              await QuestionBank.findByIdAndDelete(req.params.id);
         }
         res.json({ success: true });
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    } catch(e) { 
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 // ==========================================

@@ -11,20 +11,8 @@ const ContentProgress = require('../models/ContentProgress');
 const Subject = require('../models/Subject'); // <--- ADD THIS IMPORT
 const { setTenantContext } = require('../middleware/authMiddleware');
 
-// --- MULTER CONFIG ---
-const webdataDir = path.join(__dirname, '../../webdata'); 
-const classroomStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadPath = path.join(webdataDir, 'uploads', 'classrooms');
-    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, 'cls-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-const uploadClassroom = multer({ storage: classroomStorage, limits: { fileSize: 100 * 1024 * 1024 } });
+// --- CLOUDINARY UPLOAD CONFIG ---
+const { uploadCloud } = require('../config/cloudinary');
 
 router.use(setTenantContext);
 
@@ -90,15 +78,16 @@ router.get('/modules/:moduleId/content', async (req, res) => {
 });
 
 // Upload Content
-router.post('/modules/:moduleId/content', uploadClassroom.array('files'), async (req, res) => {
+// Upload Content (Updated for Cloudinary)
+router.post('/modules/:moduleId/content', uploadCloud.array('files'), async (req, res) => {
   try {
     if (req.role === 'student') return res.status(403).json({ error: 'Unauthorized' });
     const { title, description, type, videoUrl, allowDownload } = req.body;
     
     const attachments = req.files ? req.files.map(file => ({
       originalName: file.originalname,
-      fileName: file.filename,
-      fileUrl: path.relative(path.join(__dirname, '..', '..'), file.path).replace(/\\/g, '/'),
+      fileName: file.filename, // Cloudinary uses this for the public_id
+      fileUrl: file.path,      // 🟢 THIS IS NOW THE SECURE CLOUDINARY URL! No path logic needed.
       fileType: file.mimetype.split('/')[0],
       size: file.size
     })) : [];
@@ -111,6 +100,7 @@ router.post('/modules/:moduleId/content', uploadClassroom.array('files'), async 
       fileName: attachments.length > 0 ? attachments[0].fileName : '',
       fileUrl: attachments.length > 0 ? attachments[0].fileUrl : ''
     });
+    
     await newContent.save();
     res.json(newContent);
   } catch (e) { res.status(500).json({ error: 'Upload failed: ' + e.message }); }
@@ -156,14 +146,17 @@ router.post('/content/:id/complete', async (req, res) => {
 });
 
 // Delete Content
+// Delete Content (Updated for Vercel)
 router.delete('/content/:id', async (req, res) => {
     try {
         if (req.role === 'student') return res.status(403).json({ error: 'Unauthorized' });
+        
         const content = await ClassContent.findById(req.params.id);
-        if (content.fileUrl) {
-            const filePath = path.join(__dirname, '../../', content.fileUrl);
-            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-        }
+        if (!content) return res.status(404).json({ error: 'Content not found' });
+        
+        // 🟢 REMOVED local fs.unlinkSync logic. 
+        // It now simply deletes the database record.
+        
         await ClassContent.findByIdAndDelete(req.params.id);
         res.json({ message: 'Deleted' });
     } catch(e) { res.status(500).json({ error: 'Delete failed' }); }

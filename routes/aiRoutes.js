@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
+const axios = require('axios'); // 🟢 NEW: Added for downloading Cloudinary videos
 
 const fs = require('fs');       // For temp files
 const path = require('path');   // For file paths
@@ -9,12 +10,9 @@ const os = require('os');       // To find temp folder
 
 const sharp = require('sharp'); // 🟢 NEW: Image Resizer
 
-// ✅ SAFE TEMP DIR (Windows FFmpeg fix)
-const SAFE_TEMP_DIR = path.join(__dirname, '../../temp');
-
-if (!fs.existsSync(SAFE_TEMP_DIR)) {
-  fs.mkdirSync(SAFE_TEMP_DIR, { recursive: true });
-}
+// ✅ SAFE TEMP DIR (Vercel Fix)
+// Vercel only allows writing to the OS temp directory
+const SAFE_TEMP_DIR = os.tmpdir();
 
 
 // --- FILE PARSERS ---
@@ -665,108 +663,123 @@ router.post('/summarize-file', (req, res) => {
 
 
 // ==========================================
-// 3. Transcribe LOCAL Video (Gemini -> Check Silence -> Transcribe)
+// 3. Transcribe CLOUDINARY Video 
 // ==========================================
-router.post('/transcribe-local-video', async (req, res) => {
-  const { filename } = req.body;
-  if (!filename) return res.json({ reply: "I couldn't identify the video file." });
+router.post('/transcribe-video', async (req, res) => {
+  // 🟢 NEW: Accept a Cloudinary URL instead of a local filename
+  const { videoUrl } = req.body;
+  if (!videoUrl) return res.json({ reply: "I couldn't identify the video URL." });
 
-  const safeFilename = path.basename(filename); 
-  const filePath = path.join(VIDEO_DIRECTORY, safeFilename);
-  console.log(`🎥 Looking for video at: ${filePath}`);
+  console.log(`🎥 Downloading video from Cloudinary: ${videoUrl}`);
+  
+  // Create paths for our temporary files in Vercel's safe temp folder
+  const tempVideoPath = path.join(SAFE_TEMP_DIR, `dl-video-${Date.now()}.mp4`);
+  let tempAudioPath = null;
 
-  if (!fs.existsSync(filePath)) {
-    return res.json({ reply: `I can't find this video file on the server. (Looking for: ${safeFilename})` });
-  }
-
-  const systemInstruction = `
-    You are a teaching assistant. The student is watching this lecture video.
-    1. Summarize the lecture content.
-    2. Provide detailed bullet points of the educational takeaways.
-  `;
-
-  // ---------------------------------------------------------
-  // STRATEGY A: GEMINI (Native Video Watching)
-  // ---------------------------------------------------------
   try {
-    console.log("☁️ Attempting Gemini Video Analysis...");
-    const uploadResponse = await fileManager.uploadFile(filePath, {
-      mimeType: "video/mp4",
-      displayName: safeFilename,
+    // 🟢 NEW: Download the video from Cloudinary to a temporary file
+    const response = await axios({
+      url: videoUrl,
+      method: 'GET',
+      responseType: 'stream'
     });
 
-    let fileState = await fileManager.getFile(uploadResponse.file.name);
-    while (fileState.state === "PROCESSING") {
-      await new Promise(res => setTimeout(res, 2000));
-      fileState = await fileManager.getFile(uploadResponse.file.name);
-    }
+    const writer = fs.createWriteStream(tempVideoPath);
+    response.data.pipe(writer);
 
-    if (fileState.state === "FAILED") throw new Error("Gemini processing failed.");
+    await new Promise((resolve, reject) => {
+      writer.on('finish', resolve);
+      writer.on('error', reject);
+    });
 
-    const result = await generateWithRetry([
-      { fileData: { mimeType: uploadResponse.file.mimeType, fileUri: uploadResponse.file.uri } },
-      { text: systemInstruction }
-    ]);
+    console.log("✅ Video downloaded successfully to temp storage.");
 
-    return res.json({ reply: result.response.text() });
-
-  } catch (geminiError) {
-    console.warn("⚠️ Gemini Video Failed. Checking if video is silent...", geminiError.message);
-
-    let tempAudioPath = null;
+    const systemInstruction = `
+      You are a teaching assistant. The student is watching this lecture video.
+      1. Summarize the lecture content.
+      2. Provide detailed bullet points of the educational takeaways.
+    `;
 
     // ---------------------------------------------------------
-    // STRATEGY B: FALLBACK (Check Silence -> Transcribe)
+    // STRATEGY A: GEMINI (Native Video Watching)
     // ---------------------------------------------------------
     try {
-      console.log("🛠️ Extracting audio track...");
-      
-      // Use SAFE_TEMP_DIR defined at the top of your file
-      tempAudioPath = path.join(SAFE_TEMP_DIR, `temp-audio-${Date.now()}.wav`);
-      
-      // 1. ATTEMPT AUDIO CONVERSION
-      try {
-        await convertVideoToAudio(filePath, tempAudioPath);
-      } catch (conversionError) {
-        // If FFmpeg fails here, it usually means there is NO audio stream (Silent Video)
-        console.warn("Audio extraction failed (likely silent video):", conversionError.message);
-        return res.json({ reply: "I switched to my backup system, but I couldn't transcribe this video because it appears to be silent (no audio track found)." });
-      }
-
-      const audioBuffer = fs.readFileSync(tempAudioPath);
-      
-      // 2. TRANSCRIBE (Listen)
-      console.log("🎤 Checking for speech...");
-      const transcript = await runCloudflareAudio("@cf/openai/whisper", audioBuffer);
-
-      // 3. CHECK SILENCE (Empty Transcript)
-      if (!transcript || transcript.trim().length < 5) {
-        return res.json({ reply: "I listened to the video using my backup tool, but I couldn't detect any spoken words. It appears to be a silent video." });
-      }
-
-      // 4. NOT SILENT? -> SUMMARIZE
-      console.log("📝 Speech detected. Summarizing...");
-      const input = {
-        messages: [
-          { role: "system", content: systemInstruction },
-          { role: "user", content: `Here is the lecture transcript:\n\n${transcript.substring(0, 15000)}` }
-        ]
-      };
-      
-      const summary = await runCloudflare("@cf/meta/llama-3-8b-instruct", input);
-      return res.json({ reply: summary });
-
-    } catch (cfError) {
-      console.error("❌ Backup Strategy Failed:", cfError.message);
-      return res.status(500).json({ 
-        reply: "I tried to analyze the video, but Gemini was busy and the backup system encountered an error." 
+      console.log("☁️ Attempting Gemini Video Analysis...");
+      const uploadResponse = await fileManager.uploadFile(tempVideoPath, {
+        mimeType: "video/mp4",
+        displayName: "Cloudinary_Video_Temp",
       });
-    } finally {
-      // Cleanup Temp Files
-      if (tempAudioPath && fs.existsSync(tempAudioPath)) {
-        try { fs.unlinkSync(tempAudioPath); } catch (e) {}
+
+      let fileState = await fileManager.getFile(uploadResponse.file.name);
+      while (fileState.state === "PROCESSING") {
+        await new Promise(res => setTimeout(res, 2000));
+        fileState = await fileManager.getFile(uploadResponse.file.name);
+      }
+
+      if (fileState.state === "FAILED") throw new Error("Gemini processing failed.");
+
+      const result = await generateWithRetry([
+        { fileData: { mimeType: uploadResponse.file.mimeType, fileUri: uploadResponse.file.uri } },
+        { text: systemInstruction }
+      ]);
+
+      return res.json({ reply: result.response.text() });
+
+    } catch (geminiError) {
+      console.warn("⚠️ Gemini Video Failed. Checking if video is silent...", geminiError.message);
+
+      // ---------------------------------------------------------
+      // STRATEGY B: FALLBACK (Check Silence -> Transcribe)
+      // ---------------------------------------------------------
+      try {
+        console.log("🛠️ Extracting audio track...");
+        tempAudioPath = path.join(SAFE_TEMP_DIR, `temp-audio-${Date.now()}.wav`);
+        
+        // 1. ATTEMPT AUDIO CONVERSION
+        try {
+          await convertVideoToAudio(tempVideoPath, tempAudioPath);
+        } catch (conversionError) {
+          console.warn("Audio extraction failed (likely silent video):", conversionError.message);
+          return res.json({ reply: "I switched to my backup system, but I couldn't transcribe this video because it appears to be silent (no audio track found)." });
+        }
+
+        const audioBuffer = fs.readFileSync(tempAudioPath);
+        
+        // 2. TRANSCRIBE (Listen)
+        console.log("🎤 Checking for speech...");
+        const transcript = await runCloudflareAudio("@cf/openai/whisper", audioBuffer);
+
+        // 3. CHECK SILENCE (Empty Transcript)
+        if (!transcript || transcript.trim().length < 5) {
+          return res.json({ reply: "I listened to the video using my backup tool, but I couldn't detect any spoken words. It appears to be a silent video." });
+        }
+
+        // 4. NOT SILENT? -> SUMMARIZE
+        console.log("📝 Speech detected. Summarizing...");
+        const input = {
+          messages: [
+            { role: "system", content: systemInstruction },
+            { role: "user", content: `Here is the lecture transcript:\n\n${transcript.substring(0, 15000)}` }
+          ]
+        };
+        
+        const summary = await runCloudflare("@cf/meta/llama-3-8b-instruct", input);
+        return res.json({ reply: summary });
+
+      } catch (cfError) {
+        console.error("❌ Backup Strategy Failed:", cfError.message);
+        return res.status(500).json({ 
+          reply: "I tried to analyze the video, but Gemini was busy and the backup system encountered an error." 
+        });
       }
     }
+  } catch (downloadError) {
+    console.error("❌ Failed to download Cloudinary video:", downloadError.message);
+    return res.status(500).json({ reply: "I couldn't access the video from the cloud storage." });
+  } finally {
+    // 🟢 NEW: Crucial Vercel Cleanup - delete both the temp video and temp audio
+    if (fs.existsSync(tempVideoPath)) try { fs.unlinkSync(tempVideoPath); } catch (e) {}
+    if (tempAudioPath && fs.existsSync(tempAudioPath)) try { fs.unlinkSync(tempAudioPath); } catch (e) {}
   }
 });
 

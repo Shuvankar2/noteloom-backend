@@ -1,38 +1,41 @@
 const mongoose = require('mongoose');
 
-// MongoDB Atlas Connection
+// Global cache for serverless environment
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
+
 const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
+  if (cached.conn) {
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    cached.promise = mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      // CORRECTED TIMEOUT SETTINGS (removed bufferMaxEntries)
-      serverSelectionTimeoutMS: 10000, // 10 seconds
-      socketTimeoutMS: 45000, // 45 seconds
+      serverSelectionTimeoutMS: 10000, 
+      socketTimeoutMS: 45000, 
       maxPoolSize: 10
-      // Removed bufferMaxEntries as it's not supported
+    }).then((mongoose) => {
+      console.log('✅ MongoDB Atlas connected successfully (Serverless Cached)');
+      return mongoose;
+    }).catch(error => {
+      console.error('❌ MongoDB connection error:', error);
+      throw error;
     });
-    console.log('✅ MongoDB Atlas connected successfully');
-  } catch (error) {
-    console.error('❌ MongoDB connection error:', error);
-    process.exit(1);
   }
+  
+  cached.conn = await cached.promise;
+  return cached.conn;
 };
 
-// Add connection event listeners for debugging
-mongoose.connection.on('connected', () => {
-  console.log('✅ Mongoose connected to MongoDB');
-});
+// Handle process termination (Keep your existing events)
+mongoose.connection.on('connected', () => console.log('✅ Mongoose connected to MongoDB'));
+mongoose.connection.on('error', (err) => console.error('❌ Mongoose connection error:', err));
+mongoose.connection.on('disconnected', () => console.log('⚠️ Mongoose disconnected'));
 
-mongoose.connection.on('error', (err) => {
-  console.error('❌ Mongoose connection error:', err);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('⚠️ Mongoose disconnected');
-});
-
-// Handle process termination
 process.on('SIGINT', async () => {
   await mongoose.connection.close();
   console.log('📴 MongoDB connection closed through app termination');

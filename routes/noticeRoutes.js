@@ -6,19 +6,8 @@ const fs = require('fs');
 const Notice = require('../models/Notice');
 const { setTenantContext } = require('../middleware/authMiddleware');
 
-const webdataDir = path.join(__dirname, '../../webdata');
-const dynamicStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    let folder = req.body.type === 'staff' ? 'staff-notices' : (req.body.type === 'departmental' ? 'departmental-notices' : 'general');
-    const uploadPath = path.join(webdataDir, 'uploads', folder);
-    if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
-  },
-  filename: (req, file, cb) => {
-    cb(null, 'file-' + Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname));
-  }
-});
-const uploadNotice = multer({ storage: dynamicStorage, limits: { fileSize: 20 * 1024 * 1024 } });
+// --- CLOUDINARY UPLOAD CONFIG ---
+const { uploadCloud } = require('../config/cloudinary');
 
 router.use(setTenantContext);
 
@@ -33,18 +22,21 @@ router.get('/:type', async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Failed' }); }
 });
 
-router.post('/', uploadNotice.array('media', 10), async (req, res) => {
+// 🟢 Use uploadCloud instead
+router.post('/', uploadCloud.array('files', 10), async (req, res) => {
   try {
-    const { title, content, type, department, videoConfig } = req.body;
-    if (type === 'staff' && req.role !== 'college_admin') return res.status(403).json({ error: 'Unauthorized' });
-    if (type === 'departmental' && req.role === 'student') return res.status(403).json({ error: 'Students cannot post' });
+    const { type, title, content, department, videoConfig } = req.body;
+    if (type !== 'general' && req.role === 'student') {
+      return res.status(403).json({ error: 'Students can only post general notices' });
+    }
 
     let attachments = [];
     if (req.files) {
       attachments = req.files.map(file => ({
-        fileUrl: path.relative(path.join(__dirname, '../../'), file.path).replace(/\\/g, '/'),
-        fileName: file.filename,
         originalName: file.originalname,
+        fileName: file.filename,
+        // 🟢 NEW: Save the secure Cloudinary URL directly
+        fileUrl: file.path, 
         fileType: file.mimetype.startsWith('image/') ? 'image' : (file.mimetype.startsWith('video/') ? 'video' : 'document'),
         mimeType: file.mimetype,
         videoConfig: { playerType: videoConfig || 'mini' }
@@ -77,10 +69,23 @@ router.post('/:id/comments', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+  try {
     const notice = await Notice.findById(req.params.id);
-    if (notice.posterId.toString() !== req.user.id.toString()) return res.status(403).json({ error: 'Unauthorized' });
+    if (!notice) return res.status(404).json({ error: 'Notice not found' });
+    
+    // Admins/IT can delete anything; otherwise, you must be the poster.
+    if (!['admin', 'it'].includes(req.role) && notice.posterId.toString() !== req.user.id.toString()) {
+        return res.status(403).json({ error: 'Unauthorized to delete this notice' });
+    }
+
+    // 🟢 REMOVED local fs.unlinkSync logic. 
+    // The files will remain on Cloudinary but the database record is deleted.
+    
     await Notice.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Deleted' });
+    res.json({ message: 'Notice deleted successfully' });
+  } catch (error) { 
+    res.status(500).json({ error: error.message }); 
+  }
 });
 
 module.exports = router;

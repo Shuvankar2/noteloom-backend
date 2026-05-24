@@ -91,36 +91,63 @@ app.get('/health', (req, res) => {
 
 // --- SCHEDULED TASKS ---
 // Cleanup expired email verification codes every hour
-setInterval(async () => {
-  try {
-    const result = await EmailVerification.deleteMany({ expiresAt: { $lt: new Date() } });
-    if (result.deletedCount > 0) {
-      console.log(`🧹 Cleaned up ${result.deletedCount} expired verification codes`);
-    }
-  } catch (error) {
-    console.error('Cleanup error:', error);
-  }
-}, 60 * 60 * 1000); 
+// setInterval(async () => {
+//   try {
+//     const result = await EmailVerification.deleteMany({ expiresAt: { $lt: new Date() } });
+//     if (result.deletedCount > 0) {
+//       console.log(`🧹 Cleaned up ${result.deletedCount} expired verification codes`);
+//     }
+//   } catch (error) {
+//     console.error('Cleanup error:', error);
+//   }
+// }, 60 * 60 * 1000); 
 
 // Cleanup physical books scheduled for deletion (48-hour buffer)
-setInterval(async () => {
-  try {
-    const result = await PhysicalBook.deleteMany({
-      deleteAfter: { $lte: new Date() }
-    });
+// setInterval(async () => {
+//   try {
+//     const result = await PhysicalBook.deleteMany({
+//       deleteAfter: { $lte: new Date() }
+//     });
 
-    if (result.deletedCount > 0) {
-      console.log(`🗑️ Permanently deleted ${result.deletedCount} physical book(s) after buffer`);
-    }
+//     if (result.deletedCount > 0) {
+//       console.log(`🗑️ Permanently deleted ${result.deletedCount} physical book(s) after buffer`);
+//     }
+//   } catch (error) {
+//     console.error('Physical book cleanup error:', error);
+//   }
+// }, 60 * 60 * 1000);
+
+// --- SCHEDULED TASKS (Vercel Cron) ---
+app.get('/api/cron/cleanup', async (req, res) => {
+  try {
+    const emailResult = await EmailVerification.deleteMany({ expiresAt: { $lt: new Date() } });
+    const bookResult = await PhysicalBook.deleteMany({ deleteAfter: { $lte: new Date() } });
+    
+    console.log(`🧹 Cleaned up ${emailResult.deletedCount} emails and ${bookResult.deletedCount} books`);
+    res.status(200).json({ success: true, message: 'Cleanup complete' });
   } catch (error) {
-    console.error('Physical book cleanup error:', error);
+    console.error('Cleanup error:', error);
+    res.status(500).json({ error: 'Cleanup failed' });
   }
-}, 60 * 60 * 1000); // runs every hour
+});
 
 
 // --- START SERVER ---
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`Test it: http://localhost:${PORT}/health`);
-});
+// const PORT = process.env.PORT || 4000;
+// app.listen(PORT, () => {
+//   console.log(`🚀 Server running on port ${PORT}`);
+//   console.log(`Test it: http://localhost:${PORT}/health`);
+// });
+
+// --- START SERVER ---
+// Only listen locally. In production, Vercel handles the routing.
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`Test it: http://localhost:${PORT}/health`);
+  });
+}
+
+// Export the app for Vercel's serverless wrapper
+module.exports = app;
