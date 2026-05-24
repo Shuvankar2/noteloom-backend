@@ -21,7 +21,7 @@ const AdmZip = require('adm-zip');               // For ZIP handling
 const ExcelJS = require('exceljs');           // For Excel
 const officeParser = require('officeparser'); // For PowerPoint
 
-const pdfPoppler = require('pdf-poppler'); 
+// const pdfPoppler = require('pdf-poppler'); 
 // 🟢 NEW: Import the LocalOCR module
 const extractTextFromImage = require('../services/LocalOCR');
 
@@ -248,55 +248,64 @@ const extractTextFromPdf = async (buffer) => {
 };
 
 // 🟢 NEW: Helper to OCR Scanned PDFs (Checks 25 Page Limit)
+// const extractTextFromScannedPdf = async (buffer) => {
+//   let tempPdfPath = null;
+//   try {
+//     console.log("🔍 Converting PDF pages to images for OCR...");
+//     tempPdfPath = path.join(SAFE_TEMP_DIR, `temp-ocr-${Date.now()}.pdf`);
+//     fs.writeFileSync(tempPdfPath, buffer);
+
+//     const isWindows = os.platform() === 'win32';
+//     const opts = {
+//       format: 'png',
+//       out_dir: SAFE_TEMP_DIR,
+//       out_prefix: `ocr-page-${Date.now()}`,
+//       page: null, 
+//       bin_path: isWindows ? path.join(__dirname, 'poppler-bin') : undefined
+//     };
+
+//     await pdfPoppler.convert(tempPdfPath, opts);
+
+//     const allFiles = fs.readdirSync(SAFE_TEMP_DIR);
+//     const generatedImages = allFiles
+//       .filter(f => f.startsWith(opts.out_prefix) && f.endsWith('.png'))
+//       .map(f => path.join(SAFE_TEMP_DIR, f))
+//       .sort();
+
+//     // 🛑 LIMIT CHECK: If more than 25 pages, stop immediately
+//     if (generatedImages.length > 25) {
+//       // Cleanup and return special flag
+//       generatedImages.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
+//       return "LIMIT_EXCEEDED"; 
+//     }
+
+//     console.log(`🔍 OCR Processing ${generatedImages.length} pages...`);
+//     let fullText = "";
+
+//     for (let i = 0; i < generatedImages.length; i++) {
+//       const imgBuffer = fs.readFileSync(generatedImages[i]);
+//       const text = await extractTextFromImage(imgBuffer);
+//       fullText += `\n--- Page ${i + 1} ---\n${text}`;
+//     }
+
+//     generatedImages.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
+//     return fullText;
+
+//   } catch (err) {
+//     console.error("PDF OCR Error:", err);
+//     return "";
+//   } finally {
+//     if (tempPdfPath && fs.existsSync(tempPdfPath)) try { fs.unlinkSync(tempPdfPath); } catch (e) {}
+//   }
+// };
+
+// 🟢 UPDATED: Temporarily disabled for Vercel to prevent Linux crashes
 const extractTextFromScannedPdf = async (buffer) => {
-  let tempPdfPath = null;
-  try {
-    console.log("🔍 Converting PDF pages to images for OCR...");
-    tempPdfPath = path.join(SAFE_TEMP_DIR, `temp-ocr-${Date.now()}.pdf`);
-    fs.writeFileSync(tempPdfPath, buffer);
-
-    const isWindows = os.platform() === 'win32';
-    const opts = {
-      format: 'png',
-      out_dir: SAFE_TEMP_DIR,
-      out_prefix: `ocr-page-${Date.now()}`,
-      page: null, 
-      bin_path: isWindows ? path.join(__dirname, 'poppler-bin') : undefined
-    };
-
-    await pdfPoppler.convert(tempPdfPath, opts);
-
-    const allFiles = fs.readdirSync(SAFE_TEMP_DIR);
-    const generatedImages = allFiles
-      .filter(f => f.startsWith(opts.out_prefix) && f.endsWith('.png'))
-      .map(f => path.join(SAFE_TEMP_DIR, f))
-      .sort();
-
-    // 🛑 LIMIT CHECK: If more than 25 pages, stop immediately
-    if (generatedImages.length > 25) {
-      // Cleanup and return special flag
-      generatedImages.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
-      return "LIMIT_EXCEEDED"; 
-    }
-
-    console.log(`🔍 OCR Processing ${generatedImages.length} pages...`);
-    let fullText = "";
-
-    for (let i = 0; i < generatedImages.length; i++) {
-      const imgBuffer = fs.readFileSync(generatedImages[i]);
-      const text = await extractTextFromImage(imgBuffer);
-      fullText += `\n--- Page ${i + 1} ---\n${text}`;
-    }
-
-    generatedImages.forEach(f => { if (fs.existsSync(f)) fs.unlinkSync(f); });
-    return fullText;
-
-  } catch (err) {
-    console.error("PDF OCR Error:", err);
-    return "";
-  } finally {
-    if (tempPdfPath && fs.existsSync(tempPdfPath)) try { fs.unlinkSync(tempPdfPath); } catch (e) {}
-  }
+  console.log("⚠️ Scanned PDF OCR is disabled in serverless mode.");
+  
+  // Returning an empty string safely triggers your existing fallback message
+  // so the frontend knows the text couldn't be read.
+  return ""; 
 };
 
 // 🟢 NEW: Helper to OCR Scanned Word Docs (Checks 25 Image Limit)
