@@ -35,7 +35,7 @@ connectDB(); // Connect to MongoDB
 // --- GLOBAL MIDDLEWARE ---
 app.use(express.json());
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'https://noteloomtest.vercel.app'],
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'https://noteloomtest.vercel.app', 'https://noteloom-msofe8sfa-shuvankar2s-projects.vercel.app'],
   credentials: true
 }));
 
