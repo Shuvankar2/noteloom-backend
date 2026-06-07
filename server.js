@@ -34,8 +34,31 @@ connectDB(); // Connect to MongoDB
 
 // --- GLOBAL MIDDLEWARE ---
 app.use(express.json());
+const allowedOrigins = [
+  'http://localhost:3000', 
+  'http://localhost:5173', 
+  'https://noteloomtest.vercel.app', // Production URL
+  'https://noteloom-msofe8sfa-shuvankar2s-projects.vercel.app' // Frontend Alpha Branch URL
+];
+
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'https://noteloomtest.vercel.app', 'https://noteloom-msofe8sfa-shuvankar2s-projects.vercel.app'],
+  origin: function (origin, callback) {
+    // Allow local Postman testing or mobile app requests
+    if (!origin) return callback(null, true);
+
+    // Allow exact matches from the array above
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      return callback(null, true);
+    }
+
+    // SECURE DYNAMIC RULE: Accepts any URL starting with "noteloom" and ending with "vercel.app"
+    if (/^https:\/\/noteloom.*\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    // Block all other origins
+    return callback(new Error('Blocked by CORS policy'), false);
+  },
   credentials: true
 }));
 
