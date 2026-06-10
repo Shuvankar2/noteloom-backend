@@ -54,4 +54,23 @@ const CalendarEvent = mongoose.model('CalendarEvent', calendarEventSchema);
 const ClassRoutine = mongoose.model('ClassRoutine', classRoutineSchema);
 const LessonLog = mongoose.model('LessonLog', lessonLogSchema);
 
-module.exports = { CalendarEvent, ClassRoutine, LessonLog };
+// --- 4. Class Schedule (Faculty Specific Timetable) Schema ---
+const classScheduleSchema = new mongoose.Schema({
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
+  facultyId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  batchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', required: true },
+  subjectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Subject', required: true },
+  dayOfWeek: { 
+    type: String, 
+    enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], 
+    required: true 
+  },
+  startTime: { type: String, required: true },
+  endTime: { type: String, required: true },
+  roomNo: String,
+  createdAt: { type: Date, default: Date.now }
+});
+
+const ClassSchedule = mongoose.model('ClassSchedule', classScheduleSchema);
+
+module.exports = { CalendarEvent, ClassRoutine, LessonLog, ClassSchedule };

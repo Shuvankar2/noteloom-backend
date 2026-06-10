@@ -94,13 +94,13 @@ router.get('/info', async (req, res) => {
     let deptName = 'General';
 
     if (effectiveRole === 'student' || effectiveRole === 'individual_student') {
-      const p = await StudentProfile.findOne({ userId: user._id });
+      const p = await StudentProfile.findOne({ userId: user._id, tenantId: session.tenantId._id });
       if (p) { uid = p.uid || p.rollNo; deptName = p.stream; }
     } else if (effectiveRole === 'faculty') {
-      const p = await FacultyProfile.findOne({ userId: user._id });
+      const p = await FacultyProfile.findOne({ userId: user._id, tenantId: session.tenantId._id });
       if (p) { uid = p.uid || p.employeeId; deptName = p.department; }
     } else if (effectiveRole === 'college_admin') {
-      const p = await AdminProfile.findOne({ userId: user._id });
+      const p = await AdminProfile.findOne({ userId: user._id, tenantId: session.tenantId._id });
       if (p) { uid = p.uid || p.employeeId; deptName = 'Administration'; }
     }
 

@@ -86,8 +86,9 @@ router.get('/report', async (req, res) => {
   try {
     const { batchId, startDate, endDate } = req.query;
 
-    // 1. Fetch all students in batch
-    const batch = await Batch.findById(batchId).populate('students');
+    // 1. Fetch all students in batch (restricted to current tenant)
+    const batch = await Batch.findOne({ _id: batchId, tenantId: req.tenant.id }).populate('students');
+    if (!batch) return res.status(404).json({ error: "Batch not found" });
     const allStudents = batch.students;
 
     // 2. Aggregate Attendance Counts
@@ -96,6 +97,7 @@ router.get('/report', async (req, res) => {
     const attendanceData = await Attendance.aggregate([
       {
         $match: {
+          tenantId: new mongoose.Types.ObjectId(req.tenant.id),
           batchId: new mongoose.Types.ObjectId(batchId),
           date: { $gte: new Date(startDate), $lte: new Date(endDate) }
         }
