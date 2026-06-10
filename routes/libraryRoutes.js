@@ -468,7 +468,7 @@ router.delete('/digital/resource/:id', setTenantContext, async (req, res) => {
         if (!resource) return res.status(404).json({ error: "Resource not found" });
 
         // Permission Check: Admin OR Owner
-        const isOwner = resource.addedBy && resource.addedBy.toString() === req.user.id;
+        const isOwner = resource.addedBy && resource.addedBy.toString() === req.user.id.toString();
         if (req.role !== 'college_admin' && !isOwner) {
             return res.status(403).json({ error: "Unauthorized: You can only delete your own uploads." });
         }

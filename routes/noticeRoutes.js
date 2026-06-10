@@ -74,7 +74,7 @@ router.delete('/:id', async (req, res) => {
     if (!notice) return res.status(404).json({ error: 'Notice not found' });
     
     // Admins/IT can delete anything; otherwise, you must be the poster.
-    if (!['admin', 'it'].includes(req.role) && notice.posterId.toString() !== req.user.id.toString()) {
+    if (!['college_admin', 'it_admin', 'it_user'].includes(req.role) && notice.posterId.toString() !== req.user.id.toString()) {
         return res.status(403).json({ error: 'Unauthorized to delete this notice' });
     }
 

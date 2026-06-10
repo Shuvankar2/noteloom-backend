@@ -5,6 +5,9 @@ const LeaveApplication = require('../models/LeaveApplication');
 const User = require('../models/User'); // Assuming you have a User model file
 const FacultyProfile = require('../models/FacultyProfile');
 const StudentProfile = require('../models/StudentProfile');
+const { setTenantContext } = require('../middleware/authMiddleware');
+
+router.use(setTenantContext);
 
 
 // Middleware to verify token (You likely already have this, reuse it)
@@ -74,7 +77,7 @@ router.get('/admin/requests', async (req, res) => {
         if (search) {
             const searchRegex = new RegExp(search, 'i');
             // Find users matching name
-            const users = await User.find({ fullName: searchRegex }).select('_id');
+            const users = await User.find({ name: searchRegex }).select('_id');
             const userIds = users.map(u => u._id);
             
             query.$or = [
@@ -84,7 +87,7 @@ router.get('/admin/requests', async (req, res) => {
         }
 
         const requests = await LeaveApplication.find(query)
-            .populate('user', 'fullName department username')
+            .populate('user', 'name department noteloomId')
             .sort({ createdAt: -1 });
 
         res.json(requests);
