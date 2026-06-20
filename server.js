@@ -32,35 +32,33 @@ const { setTenantContext } = require('./middleware/authMiddleware');
 const app = express();
 connectDB(); // Connect to MongoDB
 
-// --- GLOBAL MIDDLEWARE ---
-app.use(express.json());
-const allowedOrigins = [
-  'http://localhost:3000', 
-  'http://localhost:5173', 
-  'https://noteloomtest.vercel.app', // Production URL
-  // 'https://noteloom-msofe8sfa-shuvankar2s-projects.vercel.app' // Frontend Alpha Branch URL
-];
-
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow local Postman testing or mobile app requests
+    // Allow local tools like Postman
     if (!origin) return callback(null, true);
 
-    // Allow exact matches from the array above
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    // Exact matches for local dev and production
+    const exactMatches = [
+      'http://localhost:3000', 
+      'http://localhost:5173', 
+      'https://noteloomtest.vercel.app'
+    ];
+
+    if (exactMatches.includes(origin)) {
       return callback(null, true);
     }
 
-    // SECURE DYNAMIC RULE: Accepts any URL starting with "noteloom" and ending with "vercel.app"
-    if (/^https:\/\/noteloom.*\.vercel\.app$/.test(origin)) {
+    // DYNAMIC PREVIEW MATCH: Covers all your branch URLs 
+    // (e.g., https://noteloom-git-alpha-shuvankar2s-projects.vercel.app)
+    // We remove the strict ^ at the start just in case Vercel ever prepends a subdomain
+    if (/noteloom.*\.vercel\.app$/.test(origin)) {
       return callback(null, true);
     }
 
-    // Block all other origins
-    return callback(new Error('Blocked by CORS policy'), false);
+    // Block anything else
+    return callback(new Error(`Blocked by CORS policy: ${origin}`), false);
   },
   credentials: true,
-  // ADD THESE TWO LINES 👇
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
