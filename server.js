@@ -38,7 +38,7 @@ const allowedOrigins = [
   'http://localhost:3000', 
   'http://localhost:5173', 
   'https://noteloomtest.vercel.app', // Production URL
-  'https://noteloom-msofe8sfa-shuvankar2s-projects.vercel.app' // Frontend Alpha Branch URL
+  // 'https://noteloom-msofe8sfa-shuvankar2s-projects.vercel.app' // Frontend Alpha Branch URL
 ];
 
 app.use(cors({
@@ -59,7 +59,10 @@ app.use(cors({
     // Block all other origins
     return callback(new Error('Blocked by CORS policy'), false);
   },
-  credentials: true
+  credentials: true,
+  // ADD THESE TWO LINES 👇
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept']
 }));
 
 // --- STATIC FILES ---
