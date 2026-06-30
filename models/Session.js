@@ -9,4 +9,9 @@ const sessionSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+// TTL index: MongoDB auto-deletes expired sessions (no cron job needed)
+sessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// Index for fast lastActivity updates
+sessionSchema.index({ lastActivity: 1 });
+
 module.exports = mongoose.model('Session', sessionSchema);

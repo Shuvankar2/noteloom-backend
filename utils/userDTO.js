@@ -1,6 +1,9 @@
 const { ROLE_MAP } = require('../config/systemRoles');
 const ITAdminProfile = require('../models/ITAdminProfile');
 const ITUserProfile = require('../models/ITUserProfile');
+const StudentProfile = require('../models/StudentProfile');
+const FacultyProfile = require('../models/FacultyProfile');
+const AdminProfile = require('../models/AdminProfile');
 
 /**
  * Fetches the full system user profile with standardized structure.
@@ -28,17 +31,58 @@ const getSystemUserDTO = async (user) => {
       dept = profile.department || 'IT Support';
     }
   }
-  // Future roles can be added here as: else if (user.role === 'new_role') ...
 
   return {
     id: user._id,
     name: user.name,
     email: user.email,
-    role: frontendRole, // e.g., 'noteloom_admin' (Red Badge)
-    uid: uid,           // e.g., 'ADM-001'
+    role: frontendRole, 
+    uid: uid,           
     department: dept,
     isSystemUser: true
   };
 };
 
-module.exports = { getSystemUserDTO };
+/**
+ * Fetches the standard user profile (student/faculty/college_admin) with standardized structure.
+ * @param {Object} user - The mongoose User object
+ * @param {string} effectiveRole - The user's active membership role
+ * @returns {Promise<Object>} - Standardized Frontend User Object
+ */
+const getStandardUserDTO = async (user, effectiveRole) => {
+  let uid = 'N/A';
+  let deptName = 'General';
+
+  if (effectiveRole === 'student' || effectiveRole === 'individual_student') {
+    const p = await StudentProfile.findOne({ userId: user._id });
+    if (p) { 
+      uid = p.uid || p.rollNo; 
+      deptName = p.stream || 'General'; 
+    }
+  } else if (effectiveRole === 'faculty') {
+    const p = await FacultyProfile.findOne({ userId: user._id });
+    if (p) { 
+      uid = p.uid || p.employeeId; 
+      deptName = p.department || 'General'; 
+    }
+  } else if (effectiveRole === 'college_admin') {
+    const p = await AdminProfile.findOne({ userId: user._id });
+    if (p) { 
+      uid = p.uid || p.employeeId; 
+      deptName = 'Administration'; 
+    }
+  }
+
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    uid: uid,
+    department: deptName
+  };
+};
+
+module.exports = { 
+  getSystemUserDTO,
+  getStandardUserDTO
+};
