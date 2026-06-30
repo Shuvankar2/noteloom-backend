@@ -2,9 +2,8 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const { Routine, Attendance } = require('../models/AttendanceModels');
-const StudentProfile = require('../models/StudentProfile');
-const Batch = require('../models/Batch'); // Required for attendance report
+const { Routine, Attendance } = require('../models/AttendanceModels'); // Removed WeeklyReport if not used here
+const StudentProfile = require('../models/StudentProfile'); 
 const { setTenantContext } = require('../middleware/authMiddleware');
 
 router.use(setTenantContext);
@@ -80,8 +79,9 @@ router.get('/faculty/init', async (req, res) => {
   }
 });
 
-// GET /api/attendance/report
-router.get('/report', async (req, res) => {
+// In your Express Backend Route file
+
+router.get('/attendance/report', async (req, res) => {
   try {
     const { batchId, startDate, endDate } = req.query;
 

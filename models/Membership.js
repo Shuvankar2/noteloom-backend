@@ -12,8 +12,4 @@ const membershipSchema = new mongoose.Schema({
   joinedAt: { type: Date, default: Date.now }
 });
 
-// Compound indexes for high-frequency auth queries
-membershipSchema.index({ userId: 1, tenantId: 1 }); // Used on every authenticated request
-membershipSchema.index({ tenantId: 1, role: 1 });   // Used for role-based listing
-
 module.exports = mongoose.model('Membership', membershipSchema);
