@@ -12,36 +12,9 @@ const ITAdminProfile = require('../models/ITAdminProfile');
 const SystemConfig = require('../models/SystemConfig');
 const masterFeatures = require('../config/masterFeatures');
 
-// --- HELPER: ROLE CONFIG ---
-const ROLE_MAP = {
-  'it_admin': 'noteloom_admin',
-  'it_user':  'noteloom_manager'
-};
+const { ROLE_MAP } = require('../config/systemRoles');
 
-const getSystemUserDTO = async (user) => {
-  const frontendRole = ROLE_MAP[user.role] || user.role;
-  let uid = 'N/A';
-  let dept = 'General';
-  let profile = null;
-
-  if (user.role === 'it_admin') {
-    profile = await ITAdminProfile.findOne({ userId: user._id });
-    if (profile) { uid = profile.uid || profile.employeeId; dept = profile.department || 'System Admin'; }
-  } else if (user.role === 'it_user') {
-    profile = await ITUserProfile.findOne({ userId: user._id });
-    if (profile) { uid = profile.uid || profile.employeeId; dept = profile.department || 'IT Support'; }
-  }
-
-  return {
-    id: user._id,
-    name: user.name,
-    email: user.email,
-    role: frontendRole,
-    uid: uid,
-    department: dept,
-    isSystemUser: true
-  };
-};
+const { getSystemUserDTO, getStandardUserDTO } = require('../utils/userDTO');
 
 // ==========================================
 // 1. SESSION INFO ROUTE (Existing)
@@ -59,8 +32,12 @@ router.get('/info', async (req, res) => {
     if (!session) return res.status(401).json({ error: 'Session expired' });
 
     const user = session.userId;
-    session.lastActivity = new Date();
-    await session.save();
+
+    // Update last activity conditionally (avoid write on every request)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    if (!session.lastActivity || session.lastActivity < fiveMinutesAgo) {
+      await Session.updateOne({ _id: session._id }, { $set: { lastActivity: new Date() } });
+    }
 
     const systemDbRoles = ['it_admin', 'it_user', 'noteloom_admin', 'noteloom_manager'];
     const isSystemUser = systemDbRoles.includes(user.role) || session.isSystemSession;
@@ -89,30 +66,11 @@ router.get('/info', async (req, res) => {
     if (!membership) return res.status(403).json({ error: 'Membership inactive' });
 
     const effectiveRole = membership.role;
-    
-    let uid = 'N/A';
-    let deptName = 'General';
-
-    if (effectiveRole === 'student' || effectiveRole === 'individual_student') {
-      const p = await StudentProfile.findOne({ userId: user._id });
-      if (p) { uid = p.uid || p.rollNo; deptName = p.stream; }
-    } else if (effectiveRole === 'faculty') {
-      const p = await FacultyProfile.findOne({ userId: user._id });
-      if (p) { uid = p.uid || p.employeeId; deptName = p.department; }
-    } else if (effectiveRole === 'college_admin') {
-      const p = await AdminProfile.findOne({ userId: user._id });
-      if (p) { uid = p.uid || p.employeeId; deptName = 'Administration'; }
-    }
+    const standardUserDTO = await getStandardUserDTO(user, effectiveRole);
 
     res.json({
       sessionToken: token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        uid: uid,
-        department: deptName
-      },
+      user: standardUserDTO,
       tenant: {
         id: session.tenantId._id,
         name: session.tenantId.name,

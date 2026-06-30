@@ -102,6 +102,24 @@ app.use('/api/coe', coeRoutes);
 app.use('/', systemRoutes);
 app.use('/api/leave', leaveRoutes);
 
+// --- SCHEDULED TASKS (Vercel Cron) ---
+// Mounted before '/api' catch-all routers to avoid auth middleware interception
+app.get('/api/cron/cleanup', async (req, res) => {
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret && req.headers['authorization'] !== `Bearer ${cronSecret}` && req.query.secret !== cronSecret) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const emailResult = await EmailVerification.deleteMany({ expiresAt: { $lt: new Date() } });
+    const bookResult = await PhysicalBook.deleteMany({ deleteAfter: { $lte: new Date() } });
+    console.log(`🧹 Cleaned up ${emailResult.deletedCount} emails and ${bookResult.deletedCount} books`);
+    res.status(200).json({ success: true, message: 'Cleanup complete', emailCleaned: emailResult.deletedCount, booksCleaned: bookResult.deletedCount });
+  } catch (error) {
+    console.error('Cleanup error:', error);
+    res.status(500).json({ error: 'Cleanup failed' });
+  }
+});
+
 app.use('/api', timetableRoutes); // Handles /calendar, /routine, /lessons
 app.use('/api', lmsRoutes); // Handles /modules and /content
 app.use('/api/library', libraryRoutes);
@@ -139,28 +157,6 @@ app.get('/health', (req, res) => {
 //     console.error('Physical book cleanup error:', error);
 //   }
 // }, 60 * 60 * 1000);
-
-// --- SCHEDULED TASKS (Vercel Cron) ---
-app.get('/api/cron/cleanup', async (req, res) => {
-  try {
-    const emailResult = await EmailVerification.deleteMany({ expiresAt: { $lt: new Date() } });
-    const bookResult = await PhysicalBook.deleteMany({ deleteAfter: { $lte: new Date() } });
-    
-    console.log(`🧹 Cleaned up ${emailResult.deletedCount} emails and ${bookResult.deletedCount} books`);
-    res.status(200).json({ success: true, message: 'Cleanup complete' });
-  } catch (error) {
-    console.error('Cleanup error:', error);
-    res.status(500).json({ error: 'Cleanup failed' });
-  }
-});
-
-
-// --- START SERVER ---
-// const PORT = process.env.PORT || 4000;
-// app.listen(PORT, () => {
-//   console.log(`🚀 Server running on port ${PORT}`);
-//   console.log(`Test it: http://localhost:${PORT}/health`);
-// });
 
 // --- START SERVER ---
 // Only listen locally. In production, Vercel handles the routing.

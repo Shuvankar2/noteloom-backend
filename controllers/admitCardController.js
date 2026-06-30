@@ -1,46 +1,63 @@
-const Student = require('../models/Student'); // Import your actual Student model
-const Exam = require('../models/Exam');       // Import your Exam/TimeTable model
-const Payment = require('../models/Payment'); // Import your Fee/Payment model
+const StudentProfile = require('../models/StudentProfile');
+const ExamSession = require('../models/ExamSession');
+const StudentExamForm = require('../models/StudentExamForm');
+const Subject = require('../models/Subject');
 
+/**
+ * GET /api/coe/admit-card/:studentUserId
+ * Returns the admit card dashboard data for a student.
+ * Uses actual project models: StudentProfile, ExamSession, StudentExamForm, Subject.
+ */
 exports.getAdmitCardDashboard = async (req, res) => {
   try {
-    // 1. Get the logged-in student's ID from the request (set by your Auth Middleware)
-    const studentId = req.user.id; 
+    const studentUserId = req.params.studentUserId || req.user?.id;
+    const tenantId = req.tenant?.id;
 
-    // 2. Fetch Student Details
-    const student = await Student.findById(studentId);
-    if (!student) {
-      return res.status(404).json({ message: "Student not found" });
+    // 1. Fetch Student Profile
+    const profile = await StudentProfile.findOne({ userId: studentUserId, tenantId })
+      .populate('userId', 'name email')
+      .populate({
+        path: 'batchId',
+        populate: { path: 'departmentId' }
+      });
+
+    if (!profile) {
+      return res.status(404).json({ message: 'Student profile not found' });
     }
 
-    // 3. Generate Semester History (Logic for "LOCKED", "PAID", "GENERATED")
-    // We assume an 8-semester course. We check past sems vs current sem.
-    const currentSem = student.currentSemester || 1; 
-    const history = [];
+    const currentSem = profile.batchId?.currentTerm || profile.currentSemester || 1;
+    const batch = profile.batchId;
+    const dept = batch?.departmentId;
 
+    // 2. Build semester history (8-semester course assumption)
+    const allForms = await StudentExamForm.find({
+      studentId: studentUserId,
+      tenantId,
+      paymentStatus: 'Paid'
+    }).populate('sessionId', 'sessionName year cycle');
+
+    const history = [];
     for (let i = 1; i <= 8; i++) {
-      let status = "LOCKED";
-      let payment = "NA";
-      let isCurrent = false;
+      let status = 'LOCKED';
+      let payment = 'NA';
+      const isCurrent = i === currentSem;
 
       if (i < currentSem) {
-        status = "GENERATED"; // Past semesters are always generated
-        payment = "PAID";
-      } else if (i === currentSem) {
-        isCurrent = true;
-        // Check if they have paid for this semester
-        const hasPaid = await Payment.findOne({ 
-          studentId: studentId, 
-          semester: i, 
-          status: 'success' 
-        });
+        status = 'GENERATED';
+        payment = 'PAID';
+      } else if (isCurrent) {
+        // Check if student has a paid form for the active session
+        const activeSession = await ExamSession.findOne({ tenantId, isActive: true });
+        const hasPaid = activeSession
+          ? allForms.some(f => f.sessionId && f.sessionId._id.toString() === activeSession._id.toString())
+          : false;
 
         if (hasPaid) {
-          status = "GENERATED";
-          payment = "PAID";
+          status = 'GENERATED';
+          payment = 'PAID';
         } else {
-          status = "PENDING";
-          payment = "UNPAID";
+          status = 'PENDING';
+          payment = 'UNPAID';
         }
       }
 
@@ -51,51 +68,52 @@ exports.getAdmitCardDashboard = async (req, res) => {
         status,
         payment,
         isCurrent,
-        isBacklog: false // You can add logic here to check for backlogs if you have that data
+        isBacklog: false
       });
     }
 
-    // 4. Fetch Exam Schedule (Only for the current/active semester)
-    const exams = await Exam.find({
-      stream: student.stream,       // e.g., "CSE"
-      semester: currentSem,
-      batch: student.batchYear      // Optional: exact batch matching
-    }).sort({ date: 1 });
+    // 3. Fetch subjects for the current semester (exam schedule)
+    let subjects = [];
+    if (dept) {
+      subjects = await Subject.find({
+        departmentId: dept._id,
+        semester: currentSem,
+        isActive: true
+      }).select('name code type').sort({ code: 1 });
+    }
 
-    // Format exams for the frontend
-    const formattedSchedule = exams.map(exam => ({
-      date: new Date(exam.date).toLocaleDateString('en-GB'), // e.g., "10 March 2026"
-      day: new Date(exam.date).toLocaleDateString('en-US', { weekday: 'long' }),
-      time: `${exam.startTime} - ${exam.endTime}`,
-      code: exam.subjectCode,
-      subject: exam.subjectName,
-      type: "REGULAR" 
+    // Format as a schedule
+    const formattedSchedule = subjects.map(sub => ({
+      code: sub.code,
+      subject: sub.name,
+      type: sub.type ? sub.type.toUpperCase() : 'REGULAR'
     }));
 
-    // 5. Send the Response
+    // 4. Send response
     res.status(200).json({
       candidate: {
-        name: student.fullName,
-        program: student.course || "B.Tech",
-        stream: student.stream,
-        registrationNo: student.registrationNo,
-        examRollNo: student.rollNo,
-        examCenter: "Main Block, Salt Lake Campus", // Hardcoded or fetch from DB
-        centerCode: "IEM-SL-01",
-        applicationNo: `APP${student.rollNo}`,
-        photoUrl: student.profilePicture || "" 
+        name: profile.userId?.name || 'N/A',
+        program: profile.course || 'B.Tech',
+        stream: dept?.name || profile.stream || 'N/A',
+        registrationNo: profile.uid || 'N/A',
+        examRollNo: profile.rollNo || 'N/A',
+        examCenter: 'Main Block', // Can be made configurable via SystemConfig
+        centerCode: 'N/A',
+        applicationNo: profile.rollNo ? `APP${profile.rollNo}` : 'N/A',
+        photoUrl: profile.profilePicture || ''
       },
-      history: history,
+      history,
       schedule: formattedSchedule,
       instructions: [
-        "This Admit Card is electronically generated.",
-        "Report to the center 30 minutes before the exam.",
-        "Mobile phones are strictly prohibited."
+        'This Admit Card is electronically generated.',
+        'Report to the center 30 minutes before the exam.',
+        'Mobile phones are strictly prohibited.',
+        'Bring a valid college ID along with this admit card.'
       ]
     });
 
   } catch (error) {
-    console.error("Admit Card Error:", error);
-    res.status(500).json({ message: "Server Error" });
+    console.error('Admit Card Error:', error);
+    res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
