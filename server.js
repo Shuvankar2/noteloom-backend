@@ -34,31 +34,8 @@ connectDB(); // Connect to MongoDB
 
 // --- GLOBAL MIDDLEWARE ---
 app.use(express.json());
-const allowedOrigins = [
-  'http://localhost:3000', 
-  'http://localhost:5173', 
-  'https://noteloomtest.vercel.app', // Production URL
-  'https://noteloom-msofe8sfa-shuvankar2s-projects.vercel.app' // Frontend Alpha Branch URL
-];
-
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow local Postman testing or mobile app requests
-    if (!origin) return callback(null, true);
-
-    // Allow exact matches from the array above
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      return callback(null, true);
-    }
-
-    // SECURE DYNAMIC RULE: Accepts any URL starting with "noteloom" and ending with "vercel.app"
-    if (/^https:\/\/noteloom.*\.vercel\.app$/.test(origin)) {
-      return callback(null, true);
-    }
-
-    // Block all other origins
-    return callback(new Error('Blocked by CORS policy'), false);
-  },
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'https://noteloomtest.vercel.app', 'https://noteloom-msofe8sfa-shuvankar2s-projects.vercel.app'],
   credentials: true
 }));
 
@@ -102,24 +79,6 @@ app.use('/api/coe', coeRoutes);
 app.use('/', systemRoutes);
 app.use('/api/leave', leaveRoutes);
 
-// --- SCHEDULED TASKS (Vercel Cron) ---
-// Mounted before '/api' catch-all routers to avoid auth middleware interception
-app.get('/api/cron/cleanup', async (req, res) => {
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers['authorization'] !== `Bearer ${cronSecret}` && req.query.secret !== cronSecret) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-  try {
-    const emailResult = await EmailVerification.deleteMany({ expiresAt: { $lt: new Date() } });
-    const bookResult = await PhysicalBook.deleteMany({ deleteAfter: { $lte: new Date() } });
-    console.log(`🧹 Cleaned up ${emailResult.deletedCount} emails and ${bookResult.deletedCount} books`);
-    res.status(200).json({ success: true, message: 'Cleanup complete', emailCleaned: emailResult.deletedCount, booksCleaned: bookResult.deletedCount });
-  } catch (error) {
-    console.error('Cleanup error:', error);
-    res.status(500).json({ error: 'Cleanup failed' });
-  }
-});
-
 app.use('/api', timetableRoutes); // Handles /calendar, /routine, /lessons
 app.use('/api', lmsRoutes); // Handles /modules and /content
 app.use('/api/library', libraryRoutes);
@@ -157,6 +116,28 @@ app.get('/health', (req, res) => {
 //     console.error('Physical book cleanup error:', error);
 //   }
 // }, 60 * 60 * 1000);
+
+// --- SCHEDULED TASKS (Vercel Cron) ---
+app.get('/api/cron/cleanup', async (req, res) => {
+  try {
+    const emailResult = await EmailVerification.deleteMany({ expiresAt: { $lt: new Date() } });
+    const bookResult = await PhysicalBook.deleteMany({ deleteAfter: { $lte: new Date() } });
+    
+    console.log(`🧹 Cleaned up ${emailResult.deletedCount} emails and ${bookResult.deletedCount} books`);
+    res.status(200).json({ success: true, message: 'Cleanup complete' });
+  } catch (error) {
+    console.error('Cleanup error:', error);
+    res.status(500).json({ error: 'Cleanup failed' });
+  }
+});
+
+
+// --- START SERVER ---
+// const PORT = process.env.PORT || 4000;
+// app.listen(PORT, () => {
+//   console.log(`🚀 Server running on port ${PORT}`);
+//   console.log(`Test it: http://localhost:${PORT}/health`);
+// });
 
 // --- START SERVER ---
 // Only listen locally. In production, Vercel handles the routing.
