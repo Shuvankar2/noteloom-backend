@@ -48,9 +48,15 @@ const setTenantContext = async (req, res, next) => {
     req.role = membership.role;
     req.sessionId = session._id;
 
-    // Update last activity
-    session.lastActivity = new Date();
-    await session.save();
+    // Update last activity — only if stale by more than 5 minutes to avoid
+    // a DB write on every single authenticated request.
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    if (!session.lastActivity || session.lastActivity < fiveMinutesAgo) {
+      await Session.updateOne(
+        { _id: session._id },
+        { $set: { lastActivity: new Date() } }
+      );
+    }
 
     next();
   } catch (error) {

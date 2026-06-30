@@ -14,7 +14,7 @@
   ],
   "crons": [
     {
-      "path": "/api/your-cron-endpoint",
+      "path": "/api/cron/cleanup",
       "schedule": "0 0 * * *" 
     }
   ]
