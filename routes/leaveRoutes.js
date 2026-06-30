@@ -2,17 +2,18 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const LeaveApplication = require('../models/LeaveApplication');
-const User = require('../models/User');
-const { setTenantContext } = require('../middleware/authMiddleware');
+const User = require('../models/User'); // Assuming you have a User model file
+const FacultyProfile = require('../models/FacultyProfile');
+const StudentProfile = require('../models/StudentProfile');
 
-// Apply auth middleware to all leave routes
-router.use(setTenantContext);
+
+// Middleware to verify token (You likely already have this, reuse it)
+// If not, pass your existing 'authenticateToken' middleware here
 
 // 1. FACULTY: Apply for Leave
 router.post('/apply', async (req, res) => {
     try {
-        const userId = req.user.id;
-        const { leaveType, startDate, endDate, reason } = req.body;
+        const { userId, leaveType, startDate, endDate, reason } = req.body;
         
         // Fetch user to get current department
         const user = await User.findById(userId);
@@ -41,18 +42,11 @@ router.post('/apply', async (req, res) => {
 // 2. FACULTY: Get History (Last 1 Year)
 router.get('/history/:userId', async (req, res) => {
     try {
-        const targetUserId = req.params.userId;
-        
-        // Security check: Users can only view their own leave history unless they are college admin
-        if (req.role !== 'college_admin' && req.user.id !== targetUserId) {
-            return res.status(403).json({ error: "Unauthorized access to leave history" });
-        }
-
         const oneYearAgo = new Date();
         oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
         const history = await LeaveApplication.find({
-            user: targetUserId,
+            user: req.params.userId,
             createdAt: { $gte: oneYearAgo }
         }).sort({ createdAt: -1 });
 
@@ -65,11 +59,6 @@ router.get('/history/:userId', async (req, res) => {
 // 3. ADMIN: Get All Requests (Search/Filter)
 router.get('/admin/requests', async (req, res) => {
     try {
-        // Security check: Only admins can view all requests
-        if (req.role !== 'college_admin') {
-            return res.status(403).json({ error: "Access denied. Admins only." });
-        }
-
         const { status, dept, search } = req.query;
         let query = {};
         
@@ -84,8 +73,8 @@ router.get('/admin/requests', async (req, res) => {
         // Search logic (ID or User Name)
         if (search) {
             const searchRegex = new RegExp(search, 'i');
-            // Query 'name' directly (virtual 'fullName' is not searchable in MongoDB)
-            const users = await User.find({ name: searchRegex }).select('_id');
+            // Find users matching name
+            const users = await User.find({ fullName: searchRegex }).select('_id');
             const userIds = users.map(u => u._id);
             
             query.$or = [
@@ -95,7 +84,7 @@ router.get('/admin/requests', async (req, res) => {
         }
 
         const requests = await LeaveApplication.find(query)
-            .populate('user', 'name department email') // Populating 'name' instead of virtual 'fullName' directly (Mongoose maps Virtual 'fullName' automatically on output)
+            .populate('user', 'fullName department username')
             .sort({ createdAt: -1 });
 
         res.json(requests);
@@ -107,11 +96,6 @@ router.get('/admin/requests', async (req, res) => {
 // 4. ADMIN: Action (Approve/Decline)
 router.put('/admin/action/:id', async (req, res) => {
     try {
-        // Security check: Only admins can action requests
-        if (req.role !== 'college_admin') {
-            return res.status(403).json({ error: "Access denied. Admins only." });
-        }
-
         const { status, remarks } = req.body;
         const updated = await LeaveApplication.findByIdAndUpdate(
             req.params.id, 
