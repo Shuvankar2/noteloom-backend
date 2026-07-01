@@ -1,0 +1,151 @@
+========================================================================
+NoteLoom Backend - Developer Refactoring & Upgrade Summary
+========================================================================
+This document lists the architectural refactorings, security patches, 
+and feature upgrades made to the NoteLoom backend codebase relative to the 
+original beta repository. Use this as a reference guide for future development.
+
+------------------------------------------------------------------------
+1. SECURITY & VULNERABILITY PATCHES
+------------------------------------------------------------------------
+
+A. Cleanup Cron Endpoint Protection
+   - What was happening: The `/api/cron/cleanup` route in server.js allowed
+     anyone to run cleanup tasks without any verification if CRON_SECRET was
+     not set in the environment.
+   - What was changed: Checked that process.env.CRON_SECRET exists. If not, 
+     returns 500. Added strict authorization check mapping against the 
+     CRON_SECRET header or query string.
+   - What is improved: The cleanup cron cannot be called by unauthorized bots 
+     or individuals, ensuring data integrity.
+
+B. Restricted CORS Dynamic Settings
+   - What was happening: The CORS handler in server.js accepted any URL starting 
+     with "noteloom" and ending with "vercel.app", which allowed an attacker to 
+     register a malicious site like "noteloom-steal.vercel.app" and read tokens.
+     Also, local network IPs (e.g. 192.168.x.x) or Hugging Face Space endpoints 
+     were not allowed, causing CORS blocks during testing or alternative hostings.
+   - What was changed: Restructured the regex validation to explicitly check for 
+     official branch preview subdomains (noteloom-frontend-*.vercel.app), added 
+     regex patterns for private subnets (localhost, 127.0.0.1, 192.168.x.x, 
+     10.x.x.x, 172.16.x.x-172.31.x.x) with any port, and allowed *.hf.space.
+   - What is improved: Prevents unauthorized Vercel subdomains from bypassing CORS, 
+     while ensuring seamless out-of-the-box support for local network testing and 
+     Hugging Face Space deployments.
+
+C. Encryption of Library Credentials
+   - What was happening: Portal credentials (usernames and passwords) in the 
+     LibraryCredential database collection were stored in plain text.
+   - What was changed: Created a cryptographic utility (utils/crypto.js) using 
+     AES-256-GCM. Added Mongoose getters and setters to the credential Schema 
+     in models/Library.js so that credentials are encrypted on save and decrypted 
+     on query. Included backward compatibility for plain text.
+   - What is improved: Credentials are secure at rest. Compromising the database 
+     will not expose passwords.
+
+D. Fail-Fast on Missing JWT Secret
+   - What was happening: Missing process.env.JWT_SECRET in authController.js 
+     only logged a warning, leading to silent authentication failures.
+   - What was changed: Programmed a fatal startup error if JWT_SECRET is missing.
+   - What is improved: Protects operators from deploying in an insecure state.
+
+------------------------------------------------------------------------
+2. RUNTIME CRASH FIXES
+------------------------------------------------------------------------
+
+A. Attendance Report Null Safety
+   - What was happening: The GET /report endpoint in routes/attendanceRoutes.js 
+     queried Batch.findById(). If the batch was null/deleted, it crashed the server 
+     while trying to read batch.students.
+   - What was changed: Added null verification check. If the batch does not exist, 
+     returns a clean 404 status.
+   - What is improved: System robustness. Using deleted or wrong IDs does not 
+     crash the backend process.
+
+B. IT Admin Router Overwrite Check
+   - What was happening: The routes/itAdminRoutes.js file originally contained two 
+     separate 'module.exports = router' statements, causing unexpected caching 
+     and route registration issues in Node.js.
+   - What was changed: Cleaned up the module exports so there is only one export 
+     declaration at the bottom.
+   - What is improved: Restores standard Node.js routing and package configuration.
+
+------------------------------------------------------------------------
+3. FEATURE COMPLETION & UPGRADES
+------------------------------------------------------------------------
+
+A. Scanned PDF Multimodal OCR
+   - What was happening: PDF OCR fallback was stubbed and disabled because local 
+     Tesseract binaries are heavy and exceed Vercel's 60-second limit.
+   - What was changed: Integrated the cloud-based OCR Space API inside 
+     services/fileParserService.js to parse scanned PDFs without dependencies.
+   - What is improved: Multimodal parsing of scanned PDF materials now works 
+     perfectly on serverless environments.
+
+B. Cloudinary Orphaned Asset Deletion
+   - What was happening: Deleting learning material (LMS) or question banks only 
+     removed database entries, leaving media assets orphaned on Cloudinary.
+   - What was changed: Created a deletion utility (utils/cloudinaryHelper.js) to 
+     extract public_ids and invoke cloudinary.uploader.destroy. Integrated 
+     deletions in LMS routes and COE questionBankController.js.
+   - What is improved: Prevents cloud storage leaks and keeps Cloudinary clean.
+
+C. Semester Fee Tracking Report
+   - What was happening: GET /admin/semester-fees returned a hardcoded empty array.
+   - What was changed: Coded database queries inside controllers/coeController.js 
+     to retrieve StudentExamForm records with a paymentStatus of 'Paid'.
+   - What is improved: Admins get real-time fee payment and transaction reports.
+
+D. Weekly Attendance Reports
+   - What was happening: The WeeklyReport model existed, but there were no routes 
+     or logic to compile, generate, or query weekly reports.
+   - What was changed: Implemented routes and controller logic in the attendance 
+     modules. Calculates lecture totals, student present/absent stats, and 
+     attendance percentages, saving weekly report records.
+   - What is improved: Completes weekly attendance analysis and reports features.
+
+E. Overdue Library Book Alerts
+   - What was happening: Loan due dates were stored, but there was no mailer or 
+     fine calculator to detect and notify borrowers of overdue books.
+   - What was changed: Wired overdue loan detection inside /api/cron/cleanup. 
+     Calculates days overdue and fine amount (₹10/day) and dispatches automated 
+     HTML warning emails using emailService.js and emailTemplates.js.
+   - What is improved: Automates overdue circulation follow-ups and notifications.
+
+F. Zod Request Payload Validation
+   - What was happening: Input values in HTTP requests (such as registration and 
+     sign-ins) were unvalidated, which posed a risk of crashes or NoSQL injections.
+   - What was changed: Created a validation middleware (middleware/validateMiddleware.js) 
+     and schemas using the Zod library (utils/validators.js) to validate inputs.
+   - What is improved: Blocks malformed request payloads at the door, providing clear 
+     validation error messages (400 Bad Request) to clients.
+
+------------------------------------------------------------------------
+4. CONTROLLER LAYER REFACTORING
+------------------------------------------------------------------------
+To conform to MVC / Clean Layered Architecture patterns, all inline query logic 
+and database mutations were extracted from the routes folder into controllers:
+- routes/attendanceRoutes.js -> controllers/attendanceController.js
+- routes/libraryRoutes.js    -> controllers/libraryController.js
+- routes/leaveRoutes.js      -> controllers/leaveController.js
+- routes/itAdminRoutes.js    -> controllers/itAdminController.js
+- routes/lmsRoutes.js        -> controllers/lmsController.js
+- routes/batchRoutes.js,
+  routes/classroomRoutes.js,
+  routes/departmentRoutes.js -> controllers/academicController.js
+
+Each route file is now a thin route-map file importing controller actions, 
+making the code cleaner, maintainable, and unit-testable.
+
+------------------------------------------------------------------------
+5. HUGGING FACE SPACES DEPLOYMENT READINESS
+------------------------------------------------------------------------
+To enable seamless deployment on Hugging Face Spaces, the following adjustments
+were made to accommodate persistent containerized environments:
+- server.js port binding: The server originally disabled app.listen() if
+  NODE_ENV === 'production' (targeting Vercel Serverless). It now allows 
+  app.listen() if process.env.PORT is configured.
+- Dockerfile: Created a production-ready Dockerfile (Dockerfile) configured 
+  to run as a non-root user (user with UID 1000) and expose Hugging Face's 
+  default port 7860.
+========================================================================

@@ -23,6 +23,7 @@ const sessionRoutes = require('./routes/sessionRoutes');
 const libraryRoutes = require('./routes/libraryRoutes');
 const { PhysicalBook } = require('./models/Library');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const { sendOverdueBookEmail } = require('./services/emailService');
 
 
 // --- MIDDLEWARE IMPORT ---
@@ -51,8 +52,19 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // SECURE DYNAMIC RULE: Accepts any URL starting with "noteloom" and ending with "vercel.app"
-    if (/^https:\/\/noteloom.*\.vercel\.app$/.test(origin)) {
+    // SECURE DYNAMIC RULE: Accepts any valid preview URL starting with "noteloom" and ending with "vercel.app"
+    if (/^https:\/\/noteloom(?:-frontend)?-[a-z0-9-]+\.vercel\.app$/.test(origin)) {
+      return callback(null, true);
+    }
+
+    // LOCAL NETWORK RULE: Allow localhost, 127.0.0.1, and private subnets (192.168.x.x, 10.x.x.x, 172.16.x.x-172.31.x.x) with any port
+    const localNetworkRegex = /^http:\/\/(?:localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[0-1])\.\d+\.\d+)(?::\d+)?$/;
+    if (localNetworkRegex.test(origin)) {
+      return callback(null, true);
+    }
+
+    // HUGGING FACE SPACES RULE: Allow any frontend running on Hugging Face Spaces
+    if (/^https:\/\/[a-z0-9-]+\.hf\.space$/.test(origin)) {
       return callback(null, true);
     }
 
@@ -106,17 +118,60 @@ app.use('/api/leave', leaveRoutes);
 // Mounted before '/api' catch-all routers to avoid auth middleware interception
 app.get('/api/cron/cleanup', async (req, res) => {
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && req.headers['authorization'] !== `Bearer ${cronSecret}` && req.query.secret !== cronSecret) {
+  if (!cronSecret) {
+    return res.status(500).json({ error: 'Cron secret is not configured on the server.' });
+  }
+  if (req.headers['authorization'] !== `Bearer ${cronSecret}` && req.query.secret !== cronSecret) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
     const emailResult = await EmailVerification.deleteMany({ expiresAt: { $lt: new Date() } });
     const bookResult = await PhysicalBook.deleteMany({ deleteAfter: { $lte: new Date() } });
-    console.log(`🧹 Cleaned up ${emailResult.deletedCount} emails and ${bookResult.deletedCount} books`);
-    res.status(200).json({ success: true, message: 'Cleanup complete', emailCleaned: emailResult.deletedCount, booksCleaned: bookResult.deletedCount });
+    
+    // OVERDUE BOOKS DETECTION & ALERTS
+    const currentDate = new Date();
+    const overdueBooks = await PhysicalBook.find({
+      "copies": {
+        $elemMatch: {
+          "status": "Issued",
+          "dueDate": { $lt: currentDate }
+        }
+      }
+    });
+
+    let overdueAlertsCount = 0;
+    for (const book of overdueBooks) {
+      for (const copy of book.copies) {
+        if (copy.status === 'Issued' && copy.dueDate && copy.dueDate < currentDate) {
+          const daysOverdue = Math.floor((currentDate - copy.dueDate) / (1000 * 60 * 60 * 24));
+          if (daysOverdue > 0 && copy.issuedTo && copy.issuedTo.email) {
+            const fineAmount = daysOverdue * 10; // ₹10 per day overdue
+            await sendOverdueBookEmail(
+              copy.issuedTo.email,
+              copy.issuedTo.name || 'Member',
+              book.title,
+              copy.copyId,
+              copy.dueDate,
+              daysOverdue,
+              fineAmount
+            );
+            overdueAlertsCount++;
+          }
+        }
+      }
+    }
+
+    console.log(`🧹 Cleaned up ${emailResult.deletedCount} emails and ${bookResult.deletedCount} books. Sent ${overdueAlertsCount} library alerts.`);
+    res.status(200).json({ 
+      success: true, 
+      message: 'Cleanup and alerts completed successfully', 
+      emailCleaned: emailResult.deletedCount, 
+      booksCleaned: bookResult.deletedCount,
+      overdueAlertsSent: overdueAlertsCount
+    });
   } catch (error) {
-    console.error('Cleanup error:', error);
-    res.status(500).json({ error: 'Cleanup failed' });
+    console.error('Cleanup/alerts error:', error);
+    res.status(500).json({ error: 'Cleanup/alerts failed' });
   }
 });
 
@@ -159,8 +214,9 @@ app.get('/health', (req, res) => {
 // }, 60 * 60 * 1000);
 
 // --- START SERVER ---
-// Only listen locally. In production, Vercel handles the routing.
-if (process.env.NODE_ENV !== 'production') {
+// Listen on the port if running in a container/server (Hugging Face, Render, Docker) or locally.
+// Vercel serverless environment does not require app.listen() and uses the exported app.
+if (process.env.NODE_ENV !== 'production' || process.env.PORT) {
   const PORT = process.env.PORT || 4000;
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);

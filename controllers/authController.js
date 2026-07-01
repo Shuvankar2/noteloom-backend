@@ -14,9 +14,7 @@ const { sendEmail } = require('../services/emailService');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
-  // We'll let it fail or log but not crash immediately here unless we want to, 
-  // though authRoutes crashed if it wasn't present.
-  console.error('WARNING: JWT_SECRET environment variable is not set.');
+  throw new Error('FATAL: JWT_SECRET environment variable is not set.');
 }
 
 // 1. CHECK EMAIL

@@ -3,6 +3,7 @@ const FacultyProfile = require('../models/FacultyProfile');
 const AdminProfile = require('../models/AdminProfile');
 const ITUserProfile = require('../models/ITUserProfile');
 const ITAdminProfile = require('../models/ITAdminProfile');
+const { deleteFromCloudinary } = require('../utils/cloudinaryHelper');
 
 // 1. UPLOAD QUESTION
 exports.uploadQuestion = async (req, res) => {
@@ -102,6 +103,10 @@ exports.deleteQuestion = async (req, res) => {
     try {
         const question = await QuestionBank.findById(req.params.id);
         if (question) {
+             // Deletes file from Cloudinary storage
+             if (question.fileUrl) {
+                 await deleteFromCloudinary(question.fileUrl);
+             }
              await QuestionBank.findByIdAndDelete(req.params.id);
         }
         res.json({ success: true });

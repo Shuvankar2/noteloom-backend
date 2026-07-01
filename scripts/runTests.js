@@ -295,14 +295,29 @@ async function testAIRoutes() {
 }
 
 async function testCronEndpoint() {
-  console.log(`\n${BOLD}[ 9 ] CRON / CLEANUP${RESET}`);
+  console.log(`\n${BOLD}[ 9 ] CRON / CLEANUP (Secured)${RESET}`);
 
-  await test('GET /api/cron/cleanup → 200 (cleanup runs without error)', async () => {
+  await test('GET /api/cron/cleanup without auth → 401 or 500', async () => {
     const r = await request('GET', '/api/cron/cleanup');
-    assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.body)}`);
-    assert(r.body.success === true, `Expected success:true, got ${JSON.stringify(r.body)}`);
-    console.log(`         ${DIM}→ Cleanup result: ${JSON.stringify(r.body)}${RESET}`);
+    assert([401, 500].includes(r.status), `Expected 401 or 500, got ${r.status}: ${JSON.stringify(r.body)}`);
   });
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    await test('GET /api/cron/cleanup with secret query → 200', async () => {
+      const r = await request('GET', `/api/cron/cleanup?secret=${cronSecret}`);
+      assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.body)}`);
+      assert(r.body.success === true, `Expected success:true`);
+    });
+
+    await test('GET /api/cron/cleanup with Bearer token → 200', async () => {
+      const r = await request('GET', '/api/cron/cleanup', null, cronSecret);
+      assert(r.status === 200, `Expected 200, got ${r.status}: ${JSON.stringify(r.body)}`);
+      assert(r.body.success === true, `Expected success:true`);
+    });
+  } else {
+    console.log(`         ${DIM}→ CRON_SECRET not configured in .env, skipping authenticated checks${RESET}`);
+  }
 }
 
 async function testLMSRoutes() {
@@ -345,18 +360,40 @@ async function testBadRequests() {
   });
 }
 
+async function testRequestValidation() {
+  console.log(`\n${BOLD}[ 12 ] REQUEST VALIDATION (Zod)${RESET}`);
+
+  await test('POST /api/auth/signin → 400 validation error (missing password)', async () => {
+    const r = await request('POST', '/api/auth/signin', {
+      email: 'test@noteloom.com'
+    });
+    assert(r.status === 400, `Expected 400, got ${r.status}`);
+    assert(r.body.error === "Validation failed", `Expected "Validation failed", got "${r.body.error}"`);
+    assert(r.body.details.some(d => d.field === 'password'), 'Expected password field validation detail');
+  });
+
+  await test('POST /api/auth/signin → 400 validation error (invalid email format)', async () => {
+    const r = await request('POST', '/api/auth/signin', {
+      email: 'notanemail',
+      password: 'password123'
+    });
+    assert(r.status === 400, `Expected 400, got ${r.status}`);
+    assert(r.body.details.some(d => d.field === 'email'), 'Expected email field validation detail');
+  });
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 async function main() {
   console.log(`\n${'═'.repeat(60)}`);
   console.log(`${BOLD}  NoteLoom Backend — Full Test Suite${RESET}`);
-  console.log(`  Target: ${BASE_URL}`);
+  console.log('  Target: ' + BASE_URL);
   console.log(`${'═'.repeat(60)}`);
 
   // Quick reachability check
   const reach = await request('GET', '/health');
   if (reach.status === 0) {
     console.log(`\n${RED} FATAL${RESET}: Cannot reach ${BASE_URL}`);
-    console.log(`  Make sure the server is running: npm run dev\n`);
+    console.log('  Make sure the server is running: npm run dev\n');
     process.exit(1);
   }
 
@@ -371,6 +408,7 @@ async function main() {
   await testCronEndpoint();
   await testLMSRoutes();
   await testBadRequests();
+  await testRequestValidation();
 
   // ─── Summary ───────────────────────────────────────────────────────────────
   const total = passed + failed + warned;

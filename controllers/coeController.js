@@ -320,7 +320,28 @@ exports.getExamForms = async (req, res) => {
 // 16. GET SEMESTER FEES (ADMIN)
 exports.getSemesterFees = async (req, res) => {
     try {
-        res.json([]); 
+        const forms = await StudentExamForm.find({ 
+            tenantId: req.tenant.id,
+            paymentStatus: 'Paid' 
+        })
+        .populate('sessionId', 'sessionName year')
+        .sort({ createdAt: -1 });
+
+        const records = forms.map(f => ({
+            _id: f._id,
+            studentName: f.studentName || 'N/A',
+            rollNo: f.rollNo,
+            sessionName: f.sessionId?.sessionName || 'N/A',
+            course: f.course,
+            term: f.currentTerm || 1,
+            regularFee: f.feeBreakdown?.regularFee || 0,
+            backlogFee: f.feeBreakdown?.backlogFee || 0,
+            totalPaid: f.feeBreakdown?.totalPaid || 0,
+            transactionId: f.feeBreakdown?.transactionId || 'N/A',
+            date: f.submittedAt || f.createdAt
+        }));
+
+        res.json(records); 
     } catch (e) {
         res.status(500).json({ error: e.message });
     }

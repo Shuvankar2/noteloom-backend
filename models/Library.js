@@ -1,15 +1,16 @@
 const mongoose = require('mongoose');
+const { encrypt, decrypt } = require('../utils/crypto');
 
 // 1. Digital Credentials
 const credentialSchema = new mongoose.Schema({
   tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true },
   providerName: { type: String, required: true },
-  loginId: { type: String, required: true },
-  password: { type: String, required: true },
+  loginId: { type: String, required: true, get: decrypt, set: encrypt },
+  password: { type: String, required: true, get: decrypt, set: encrypt },
   link: String,
   note: String,
   updatedAt: { type: Date, default: Date.now }
-});
+}, { toJSON: { getters: true }, toObject: { getters: true } });
 
 // 2. Digital Resources (Updated)
 const digitalResourceSchema = new mongoose.Schema({

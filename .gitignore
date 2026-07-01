@@ -1,6 +1,46 @@
+# Dependencies
 node_modules/
+/jspm_packages/
+/web_stage/
+
+# Environment variables & secrets
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+
+# File Uploads & Local storage
 uploads/
+/tesseract_data/
+/poppler-bin/
+*.pdf
+*.docx
+*.xlsx
+*.pptx
+
+# Logs & Diagnostics
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 *.log
-tesseract_data/
-poppler-bin/
+
+# Serverless & Build directories
+.vercel/
+/dist/
+/build/
+.serverless/
+.fusebox/
+.dynamodb/
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db

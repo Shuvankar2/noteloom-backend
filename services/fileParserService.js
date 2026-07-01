@@ -5,6 +5,7 @@ const mammoth = require('mammoth');
 const AdmZip = require('adm-zip');
 const ExcelJS = require('exceljs');
 const officeParser = require('officeparser');
+const axios = require('axios');
 const extractTextFromImage = require('./ocrService');
 
 // Safe PDF loader
@@ -79,8 +80,38 @@ const extractTextFromPdf = async (buffer) => {
 };
 
 const extractTextFromScannedPdf = async (buffer) => {
-  console.log("⚠️ Scanned PDF OCR is disabled in serverless mode.");
-  return ""; 
+  try {
+    const base64Data = buffer.toString('base64');
+    const base64Image = `data:application/pdf;base64,${base64Data}`;
+    
+    const params = new URLSearchParams();
+    params.append('apikey', process.env.OCR_SPACE_API_KEY || 'helloworld');
+    params.append('language', 'eng');
+    params.append('filetype', 'PDF');
+    params.append('base64image', base64Image);
+
+    console.log("☁️ Attempting Cloud OCR Space PDF text extraction...");
+    const response = await axios.post('https://api.ocr.space/parse/image', params, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    });
+
+    if (response.data && response.data.ParsedResults && Array.isArray(response.data.ParsedResults)) {
+      const texts = response.data.ParsedResults.map(result => result.ParsedText).filter(Boolean);
+      const fullText = texts.join('\n');
+      console.log(`✅ Cloud OCR successfully parsed ${texts.length} PDF pages.`);
+      return fullText;
+    } else {
+      console.warn("⚠️ OCR Space returned no parsed results:", response.data);
+      return "";
+    }
+  } catch (err) {
+    console.error("Cloud OCR Space PDF Error:", err.message);
+    return "";
+  }
 };
 
 const extractTextFromScannedDocx = async (buffer) => {
