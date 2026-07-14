@@ -285,7 +285,7 @@ router.post('/signin', async (req, res) => {
       const actualMembership = await Membership.findOne({ userId: user._id }).populate('tenantId');
       return res.status(403).json({ 
         error: 'college_mismatch', 
-        userCollegeName: actualMembership?.tenantId.name || 'another institution'
+        userCollegeName: actualMembership?.tenantId?.name || 'another institution'
       });
     }
 

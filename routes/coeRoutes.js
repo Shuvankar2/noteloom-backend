@@ -428,15 +428,6 @@ router.delete('/question/:id', async (req, res) => {
 // 3. EXAM SESSIONS
 // ==========================================
 
-router.post('/session', async (req, res) => {
-  try {
-    if (req.body.isActive) await ExamSession.updateMany({}, { isActive: false });
-    const session = new ExamSession(req.body);
-    await session.save();
-    res.json(session);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
 router.get('/active-session', async (req, res) => {
   const session = await ExamSession.findOne({ isActive: true });
   res.json(session);

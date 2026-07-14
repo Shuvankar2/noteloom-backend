@@ -283,7 +283,7 @@ router.post('/signout', async (req, res) => {
   }
 });
 
-module.exports = router;
+
 
 // ==========================================
 // 4. NEW: FEATURE CONFIG (The Fix for Empty Screen)

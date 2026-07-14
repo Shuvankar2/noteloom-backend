@@ -92,10 +92,10 @@ router.post('/:id/enroll', async (req, res) => {
     const classroom = await Classroom.findOne({ _id: req.params.id, tenantId: req.tenant.id });
 
     if (roleType === 'student') {
-        if (classroom.students.includes(profile.userId)) return res.status(400).json({ error: 'Student already enrolled' });
+        if (classroom.students.some(id => id.toString() === profile.userId.toString())) return res.status(400).json({ error: 'Student already enrolled' });
         classroom.students.push(profile.userId);
     } else {
-        if (classroom.teachers.includes(profile.userId)) return res.status(400).json({ error: 'Faculty already added' });
+        if (classroom.teachers.some(id => id.toString() === profile.userId.toString())) return res.status(400).json({ error: 'Faculty already added' });
         classroom.teachers.push(profile.userId);
     }
     await classroom.save();
